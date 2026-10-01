@@ -2,12 +2,11 @@ import streamlit as st
 import google.generativeai as genai
 from supabase import create_client
 from apify_client import ApifyClient
-import pandas as pd
 import json
 
 st.set_page_config(page_title="Strategy Mentoring AI", layout="wide")
 
-# Initialize Connections
+# 1. Initialize Connections
 @st.cache_resource
 def init_services():
     supabase_url = st.secrets["SUPABASE_URL"]
@@ -24,95 +23,141 @@ def init_services():
 try:
     supabase, model, apify = init_services()
 except Exception as e:
-    st.warning("الرجاء ضبط المفاتيح (Secrets) في Streamlit للبدء.")
+    st.warning("⚠️ الرجاء ضبط المفاتيح (Secrets) في Streamlit للبدء.")
 
-st.title("📊 Strategy Mentoring - Social Media Audit & Strategy Tool")
+st.title("📊 Strategy Mentoring - Audit & AI Strategy Tool")
 
-# Sidebar for Project Selection or New Audit
+# Sidebar
 st.sidebar.header("📁 إدارة المشاريع")
 project_mode = st.sidebar.radio("اختر النمط:", ["مشروع جديد", "استعراض المشاريع السابقة"])
 
 if project_mode == "مشروع جديد":
-    st.header("1️⃣ المدخلات الأساسية للبراند والمنافسين")
+    st.header("📝 إدخال بيانات البراند والبحث")
     
     with st.form("audit_form"):
         col1, col2 = st.columns(2)
         with col1:
             brand_name = st.text_input("اسم البراند الرئيسي *")
-            brand_url = st.text_input("رابط الموقع / الواتساب")
-            country_target = st.text_input("الدولة / التغطية الجغرافية *")
-            primary_goal = st.text_input("الهدف الرئيسي للبراند *")
+            brand_url = st.text_input("رابط الموقع / اللاندنج / الواتساب")
+            geo_coverage = st.text_input("الدولة / المدينة / التغطية الجغرافية *")
+            main_objective = st.text_input("الهدف الرئيسي اللى فى البريف (30/60/90 يوم) *")
             
         with col2:
             ig_handle = st.text_input("Instagram Username (البراند الرئيسي)")
-            fb_url = st.text_input("Facebook Page URL (البراند الرئيسي)")
-            tiktok_handle = st.text_input("TikTok Username (البراند الرئيسي)")
-            ad_spend = st.number_input("الميزانية الإعلانية الإجمالية ($) - اختياري", min_value=0.0, value=0.0)
+            fb_url = st.text_input("Facebook Page URL")
+            tiktok_handle = st.text_input("TikTok Username")
+            ad_spend = st.number_input("الميزانية الإعلانية على Meta خلال الفترة ($) - اختياري", min_value=0.0, value=0.0)
 
-        st.subheader("👥 منافسين (حتى 2 منافسين)")
-        comp1_name = st.text_input("اسم المنافس الأول")
-        comp1_ig = st.text_input("Instagram Username للمنافس الأول")
+        st.subheader("👥 بيانات المنافس")
+        comp_name = st.text_input("اسم المنافس")
+        comp_ig = st.text_input("Instagram Username للمنافس")
+        comp_fb = st.text_input("Facebook Page URL للمنافس")
+        comp_gmaps = st.text_input("Google Maps / Business Profile Link للمنافس")
         
-        st.subheader("💬 أبحاث الجمهور والتقييمات (Data Samples)")
-        customer_comments = st.text_area("عينة من كومنتات/اعتراضات الجمهور أو تقييمات جوجل")
+        st.subheader("💬 عينات أبحاث السوق والتقييمات")
+        market_insights = st.text_area("عينة تعليقات، اعتراضات الجمهور من الجروبات، أو تقييمات Google/Reviews")
         
-        submitted = st.form_submit_button("🚀 بدء الـ Audit واستخراج الاستراتيجية")
+        submitted = st.form_submit_button("🚀 بدء الـ Audit واستخراج الاستراتيجية الكاملة")
 
     if submitted and brand_name:
-        st.info("جاري جلب البيانات وتحليل الحسابات...")
+        st.info("🔄 جاري سحب البيانات المتاحة عبر Apify...")
         
-        # Data Scraping via Apify Actors (Sample fetching)
         scraped_data = {}
         if ig_handle:
             try:
                 run_input = {"directUrls": [f"https://www.instagram.com/{ig_handle}/"], "resultsType": "details"}
                 run = apify.actor("apify/instagram-profile-scraper").call(run_input=run_input)
-                dataset_items = apify.dataset(run["defaultDatasetId"]).list_items().items
-                scraped_data['instagram'] = dataset_items
+                scraped_data['brand_ig'] = apify.dataset(run["defaultDatasetId"]).list_items().items
             except Exception as e:
-                scraped_data['instagram_error'] = str(e)
-                
-        # Strategic AI Prompting
-        st.info("جاري تحليل البيانات بواسطة AI واستخراج القرارات الاستراتيجية...")
-        
-        system_prompt = f"""
-        أنت استشاري تسويق إلكتروني خبير (Senior Growth & Strategy Director).
-        قم بإجراء Audit كامل واستخراج استراتيجية شاملة للبراند: {brand_name}.
-        
-        المدخلات:
-        - الدولة والجمهور المستهدف: {country_target}
-        - الهدف الرئيسي: {primary_goal}
-        - الميزانية الإعلانية: {ad_spend} $
-        - حساب الإنستجرام: {ig_handle}
-        - المنافس: {comp1_name} ({comp1_ig})
-        - عينة تعليقات واعتراضات الجمهور: {customer_comments}
-        - البيانات المسحوبة من المنصة: {json.dumps(scraped_data, ensure_ascii=False)}
+                scraped_data['ig_error'] = str(e)
 
-        المطلوب مخرجات باللغة العربية مقسمة بالكامل للقطاعات التالية في صيغة JSON حصرية:
-        1. "situation_analysis": {{ "platform_audit": "...", "content_gaps": "...", "ads_evaluation": "..." }}
-        2. "competitor_analysis": {{ "strengths": "...", "weaknesses": "...", "positioning": "..." }}
-        3. "swot_analysis": {{ "strengths": [], "weaknesses": [], "opportunities": [], "threats": [] }}
-        4. "customer_journey": {{ "awareness_levels": "...", "purchase_triggers": "...", "barriers": "..." }}
-        5. "smart_objectives": {{ "30_days": "...", "60_days": "...", "90_days": "...", "kpis": "..." }}
-        6. "buyer_personas": [ {{ "segment_name": "...", "age_gender": "...", "location": "...", "pain_points": "...", "trigger": "..." }} ]
+        st.info("🧠 جاري تحليل البيانات وبناء التقرير الاستراتيجي الهيكلي...")
         
-        تأكد أن كل رقم ومعلومة يتم ترجمتها إلى قرار عملي وتوصية واضحة للنمو.
+        detailed_prompt = f"""
+        أنت Senior Brand Strategist & Growth Marketer. قم بإجراء Audit واستخراج استراتيجية تسويقية متكاملة ومشروحة بدقة للبراند: '{brand_name}'.
+
+        المدخلات الأساسية:
+        - البراند: {brand_name} ({brand_url})
+        - الدولة/التغطية: {geo_coverage}
+        - الهدف الرئيسي: {main_objective}
+        - الميزانية الإعلانية على Meta: {ad_spend} $
+        - حسابات البراند: Instagram ({ig_handle}), FB ({fb_url}), TikTok ({tiktok_handle})
+        - المنافس: {comp_name} (IG: {comp_ig}, FB: {comp_fb}, Maps: {comp_gmaps})
+        - مدخلات أبحاث السوق والكومنتات: {market_insights}
+        - بيانات Scraping المتاحة: {json.dumps(scraped_data, ensure_ascii=False)}
+
+        المطلوب: قم بتوليد التقرير بتنسيق Markdown متناسق ومنسق جداً باللغة العربية، ملتزماً بالهيكل التالي حرفياً وبكل أجزائه:
+
+        ## 1- Situation Analysis
+
+        ### A. Platforms Analysis
+        - تحليل الحسابات والنمو والمتابعين.
+        - Reach & Engagements (تقدير واستخراج بناءً على البيانات والميزانية).
+        - Profile Visits / Website or WhatsApp Clicks.
+        - تنوع المحتوى شهرياً (Reels, Carousels, Single Images, Text).
+        - أفضل 5 Reels من حيث المشاهدات + أفضل 5 بوستات تفاعلاً.
+        - إحصائيات الفيديو المتقدمة (Watch Time, Average Play Time, 3-sec Views).
+        - تحليل حملات Meta Ads (الميزانية {ad_spend}$، الهدف الموصى به، عدد النتائج المتوقع، و Cost Per Result المتوقع).
+
+        ### B. Audience Analysis
+        - سلوك المستخدم وساعات الاستخدام من DataReportal (ترتيب المنصات في {geo_coverage}، نوع المحتوى المفضل).
+        - الديموغرافيات (نسب الذكور/الإناث، الفئات العمرية، أهم المدن، المستوى الاقتصادي).
+        - المشاكل والاعتراضات (من AnswerThePublic/الجروبات/الكومنتات).
+        - الاهتمامات ودوافع الشراء وسلوك المستخدم على Facebook و Instagram و TikTok.
+        - عوامل بناء الثقة واعتراضات الشراء.
+
+        ### C. Competitor Analysis (المنافس: {comp_name})
+        - الروابط ونطاق التغطية والجمهور المستهدف.
+        - Positioning & Offer, USP, Proofs, Bundles, والأسعار (معلنة أم لا).
+        - أقوى CTA وطريقة الوصول للـ Offer (واتساب/فورم/مكالمة).
+        - تحليل الفانل (Nurture / Auto-reply).
+        - تنوع المحتوى شهرياً + أفضل 5 Reels وأفضل 5 بوستات تفاعلاً عنده.
+        - أكثر 3 Topics متكررة ونبرة الصوت (Tone of Voice).
+        - Content Gaps (الفجوات التسويقية التي لم يغطها المنافس).
+        - Meta Ad Library Analysis (الأنماط الإعلانية، الكرياتيف، والعروض).
+        - تقييمات Google Ratings وملخص الإيجابيات والسلبيات وسرعة الرد.
+        - ملخص المقارنة: (3 نقاط تفوقنا - 3 نقاط تفوقه - فرصة Quick Win).
+
+        ### D. SWOT Analysis
+        - Strengths (نقاط القوة).
+        - Weaknesses (نقاط الضعف).
+        - Opportunities (الفرص).
+        - Threats (التهديدات).
+
+        ---
+
+        ## 2- Customer Journey
+        - درجة الوعي (Awareness Levels): Unaware, Problem Aware, Solution Aware, Brand Aware مع ربطها بالسلوكيات.
+        - رحلة العميل تفصيلياً: أول نقطة احتكاك -> ماذا يفعل قبل الشراء -> ما يمنعه من القرار -> ما يدفعه للقرار النهائي.
+
+        ---
+
+        ## 3- Objectives + Key Results (KPI)
+        - ملخص الهدف والحجم والسوق والفترة (30/60/90 يوم).
+        - تحديد 3 أهداف استراتيجية SMART محددة + الـ KPI الأساسي لكل هدف.
+
+        ---
+
+        ## 4- Customer (Segment & Buyer Persona)
+        - تحديد 4 Segments تفصيلية مع توضيح: (Interest/Need + Location + Age & Gender + Pain Point + Decision Trigger).
+
+        اجعل التقرير مليئاً بالتحليلات التخصصية، القرارات العملية، والحلول المباشرة بدون كلام إنشائي مجرد.
         """
         
-        ai_response = model.generate_content(system_prompt)
+        ai_response = model.generate_content(detailed_prompt)
         
-        st.success("تم الانتهاء من التحليل والاستراتيجية بنجاح!")
+        st.success("✅ تم استخراج الاستراتيجية والـ Audit بنجاح!")
         st.markdown(ai_response.text)
         
-        # Save results to Supabase
+        # Save to Supabase
         db_payload = {
             "brand_name": brand_name,
-            "inputs": {"country": country_target, "goal": primary_goal, "ad_spend": ad_spend},
+            "inputs": {"geo": geo_coverage, "objective": main_objective, "ad_spend": ad_spend},
             "scraped_data": scraped_data,
             "strategy_output": ai_response.text
         }
         supabase.table("strategy_projects").insert(db_payload).execute()
-        st.info("تم حفظ المشروع في قاعدة البيانات بنجاح.")
+        st.info("💾 تم حفظ التقرير في قاعدة البيانات بنجاح.")
 
 elif project_mode == "استعراض المشاريع السابقة":
     st.header("📂 المشاريع المحفوظة")
@@ -124,7 +169,7 @@ elif project_mode == "استعراض المشاريع السابقة":
         selected_proj = st.selectbox("اختر مشروعاً لعرضه:", project_names)
         idx = project_names.index(selected_proj)
         
-        st.subheader(f"تقرير الاستراتيجية والـ Audit لـ {projects[idx]['brand_name']}")
+        st.subheader(f"📊 التقرير الاستراتيجي لـ {projects[idx]['brand_name']}")
         st.markdown(projects[idx]['strategy_output'])
     else:
         st.write("لا توجد مشاريع محفوظة حالياً.")
