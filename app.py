@@ -4,9 +4,9 @@ from supabase import create_client
 from apify_client import ApifyClient
 import json
 
-st.set_page_config(page_title="Strategy Mentoring - Full Audit & Strategy", layout="wide")
+st.set_page_config(page_title="Strategy Mentoring - Auto IG Scraper & Audit", layout="wide")
 
-# 1. Initialize Connections
+# Initialize Services
 @st.cache_resource
 def init_services():
     supabase_url = st.secrets["SUPABASE_URL"]
@@ -25,184 +25,197 @@ try:
 except Exception as e:
     st.warning("⚠️ الرجاء ضبط المفاتيح (Secrets) في Streamlit للبدء.")
 
-st.title("📊 Strategy Mentoring - Automated Complete Audit Tool")
+st.title("📊 Strategy Mentoring - Automated Social Media Audit")
 
-# Sidebar
+# Helper function to parse and extract top metrics automatically via Python
+def parse_ig_apify_data(items):
+    if not items:
+        return {"error": "لم يتم العثور على منشورات أو الحساب خاص"}
+    
+    reels = []
+    posts = []
+    reels_count = 0
+    carousel_count = 0
+    image_count = 0
+    
+    for item in items:
+        p_type = item.get('type', '')
+        is_video = item.get('isVideo', False) or p_type in ['Video', 'Reel']
+        
+        # Count types
+        if is_video:
+            reels_count += 1
+            views = item.get('playCount') or item.get('videoViewCount') or item.get('likesCount', 0)
+            reels.append({
+                'url': item.get('url', ''),
+                'views': views,
+                'caption': item.get('caption', '')[:100]
+            })
+        elif p_type in ['Sidecar', 'Carousel']:
+            carousel_count += 1
+        else:
+            image_count += 1
+            
+        engagements = (item.get('likesCount', 0) or 0) + (item.get('commentsCount', 0) or 0)
+        posts.append({
+            'url': item.get('url', ''),
+            'engagements': engagements,
+            'likes': item.get('likesCount', 0),
+            'comments': item.get('commentsCount', 0),
+            'caption': item.get('caption', '')[:100]
+        })
+        
+    # Sort automatically in Python
+    top_5_reels = sorted(reels, key=lambda x: x['views'], reverse=True)[:5]
+    top_5_posts = sorted(posts, key=lambda x: x['engagements'], reverse=True)[:5]
+    
+    return {
+        "followers": items[0].get('followersCount', 'غير محدد') if items else 'N/A',
+        "content_mix": f"Reels: {reels_count} | Carousels: {carousel_count} | Images: {image_count}",
+        "top_5_reels": top_5_reels,
+        "top_5_posts": top_5_posts
+    }
+
+# Navigation Sidebar
 st.sidebar.header("📁 إدارة المشاريع")
 project_mode = st.sidebar.radio("اختر النمط:", ["مشروع جديد", "استعراض المشاريع السابقة"])
 
 if project_mode == "مشروع جديد":
-    st.header("📝 إدخال البيانات الأساسية (والـ AI يحلل ويستكمل كافة المخرجات)")
+    st.header("🎯 الإدخالات (Apify والـ AI يتكفلان بالباقي أوتوماتيكياً)")
     
-    with st.form("exact_structured_form"):
-        tab1, tab2, tab3 = st.tabs(["1️⃣ البراند والمنصات", "2️⃣ المنافس والسوق", "3️⃣ الأرقام الداخلية (اختياري)"])
+    with st.form("auto_audit_form"):
+        col1, col2 = st.columns(2)
+        with col1:
+            brand_name = st.text_input("اسم البراند الرئيسي *")
+            ig_handle = st.text_input("Instagram Username للبراند (بدون @) *", placeholder="مثال: nike")
+            geo_coverage = st.text_input("الدولة / السوق المستهدف *", placeholder="مصر / السعودية")
+            main_objective = st.text_input("الهدف الرئيسي (30/60/90 يوم) *")
+            product_service = st.text_input("المنتج / الخدمة *")
         
-        with tab1:
-            col1, col2 = st.columns(2)
-            with col1:
-                brand_name = st.text_input("اسم البراند الرئيسي *", placeholder="مثال: Brand X")
-                product_service = st.text_input("المنتج / الخدمة *", placeholder="مثال: كورسات / كافيه / ملابس")
-                geo_coverage = st.text_input("الدولة / المدينة / التغطية الجغرافية *", placeholder="مثال: مصر - القاهرة")
-                main_objective = st.text_input("الهدف الرئيسي اللى فى البريف (30/60/90 يوم) *")
-                expected_audience = st.text_input("عدد الجمهور المتوقع للبراند")
-            with col2:
-                ig_handle = st.text_input("Instagram Username / Link")
-                fb_url = st.text_input("Facebook Page Link")
-                tiktok_handle = st.text_input("TikTok Username / Link")
-                linkedin_url = st.text_input("LinkedIn Link")
-                yt_url = st.text_input("YouTube Channel Link")
+        with col2:
+            comp_name = st.text_input("اسم المنافس الرئيسي *")
+            comp_ig = st.text_input("Instagram Username للمنافس (بدون @) *", placeholder="مثال: adidas")
+            ad_spend = st.number_input("صرف الإعلانات المباشر على Meta ($) - اختياري", min_value=0.0, value=0.0)
+            private_notes = st.text_area("أي بيانات خاصة أو ملاحظات إضافية (اختياري)")
 
-        with tab2:
-            col_a, col_b = st.columns(2)
-            with col_a:
-                comp_name = st.text_input("اسم المنافس")
-                comp_website = st.text_input("لينك الموقع/اللاندنج للمنافس")
-                comp_ig = st.text_input("لينك Instagram للمنافس")
-                comp_fb = st.text_input("Facebook/TikTok/Google Maps للمنافس")
-            with col_b:
-                market_insights = st.text_area("عينة تعليقات/اعتراضات/شكاوى الجمهور من الجروبات أو التقييمات")
+        submitted = st.form_submit_button("🚀 بدء السحب الأوتوماتيكي والـ Audit الكامل")
 
-        with tab3:
-            c1, c2, c3 = st.columns(3)
-            with c1:
-                followers_count = st.text_input("عدد المتابعين الحالي والنمو")
-                reach_period = st.text_input("Reach والتفاعلات خلال الفترة")
-            with c2:
-                profile_visits = st.text_input("Profile Visits / Clicks")
-                content_mix_input = st.text_input("تنوع المحتوى شهرياً (كام ريل/كاروسيل/صورة/تكست)")
-            with c3:
-                ad_spend = st.number_input("اتصرف كام على Meta Ads ($)", min_value=0.0, value=0.0)
-                ad_results = st.text_input("هدف الإعلانات والنتائج و Cost Per Result")
+    if submitted and brand_name and ig_handle:
+        st.info("🔄 جاري سحب بيانات البراند والمنافس أوتوماتيكياً عبر Apify...")
+        
+        brand_parsed = {}
+        comp_parsed = {}
+        
+        # Scrape Brand
+        try:
+            run_input_brand = {"directUrls": [f"https://www.instagram.com/{ig_handle}/"], "resultsType": "posts"}
+            run_b = apify.actor("apify/instagram-post-scraper").call(run_input=run_input_brand, timeout_secs=35)
+            brand_items = apify.dataset(run_b["defaultDatasetId"]).list_items().items
+            brand_parsed = parse_ig_apify_data(brand_items)
+        except Exception as e:
+            st.warning(f"⚠️ تعذر سحب كامل منشورات البراند أوتوماتيكياً: {str(e)}")
 
-        submitted = st.form_submit_button("🚀 بدء الـ Audit واستخراج المخرجات الكاملة")
-
-    if submitted and brand_name:
-        st.info("🔄 جاري سحب البيانات عبر Apify...")
-        scraped_data = {}
-        if ig_handle:
+        # Scrape Competitor
+        if comp_ig:
             try:
-                run_input = {"directUrls": [f"https://www.instagram.com/{ig_handle}/"], "resultsType": "details"}
-                run = apify.actor("apify/instagram-profile-scraper").call(run_input=run_input, timeout_secs=25)
-                scraped_data['brand_ig'] = apify.dataset(run["defaultDatasetId"]).list_items().items
+                run_input_comp = {"directUrls": [f"https://www.instagram.com/{comp_ig}/"], "resultsType": "posts"}
+                run_c = apify.actor("apify/instagram-post-scraper").call(run_input=run_input_comp, timeout_secs=35)
+                comp_items = apify.dataset(run_c["defaultDatasetId"]).list_items().items
+                comp_parsed = parse_ig_apify_data(comp_items)
             except Exception as e:
-                scraped_data['ig_error'] = str(e)
+                st.warning(f"⚠️ تعذر سحب بيانات المنافس أوتوماتيكياً: {str(e)}")
 
-        st.info("🧠 جاري إعداد التقرير المكتمل بنسبة 100% وتعبئة كافة الجداول والبندود المطلوبة...")
+        st.info("🧠 جاري تحليل الداتا المسحوبة وإعداد التقرير الاستراتيجي الشامل...")
 
-        full_output_prompt = f"""
-        أنت Senior Marketing Strategist. قم بإنشاء Audit واستراتيجية تسويقية متكاملة ومشروحة بدقة للبراند '{brand_name}'.
-        يجب عليك الالتزام بالحقول والبنية التالية حرفياً، وتعبئة كافة البيانات المطلوبة إما من المدخلات أو استنتاجه وتحليله بناءً على معايير السوق وتحديثات DataReportal والداتا المسحوبة.
+        prompt = f"""
+        أنت Senior Growth Director & Brand Strategist.
+        قم بإجراء Audit كامل واستخراج استراتيجية متكاملة للبراند '{brand_name}' بناءً على البيانات التي تم سحبها أوتوماتيكياً بواسطة Apify والمعطيات التالية:
 
-        عرض التقرير يكون بتنسيق Markdown احترافي، ويشمل كل البنود بدون اختصار:
+        معلومات الإدخال:
+        - البراند: {brand_name} (IG: instagram.com/{ig_handle})
+        - المنافس: {comp_name} (IG: instagram.com/{comp_ig})
+        - الدولة/السوق: {geo_coverage}
+        - الهدف: {main_objective}
+        - المنتج/الخدمة: {product_service}
+        - صرف الإعلانات المباشر: {ad_spend} $
+        - ملاحظات إضافية: {private_notes}
+
+        البيانات المستخرجة أوتوماتيكياً بواسطة Python و Apify للبراند:
+        {json.dumps(brand_parsed, ensure_ascii=False, indent=2)}
+
+        البيانات المستخرجة أوتوماتيكياً بواسطة Python و Apify للمنافس ({comp_name}):
+        {json.dumps(comp_parsed, ensure_ascii=False, indent=2)}
+
+        المطلوب: توليد التقرير كاملاً باللغة العربية مع الالتزام بالهيكل التالي حرفياً وبكل تفاصيله وبدون حذف أو اختصار أي بند:
 
         # Strategy Mentoring - {brand_name}
 
         ## 1- Situation Analysis
 
         ### platforms analysis
-        | البند | البيان / التحليل |
-        | :--- | :--- |
-        | **لينك/يوزر الحساب** | FB: {fb_url} \| IG: {ig_handle} \| TikTok: {tiktok_handle} \| LinkedIn: {linkedin_url} \| YT: {yt_url} |
-        | **عدد المتابعين الحالي** | {followers_count if followers_count else 'استخراج بناءً على المنصات'} |
-        | **نمو المتابعين خلال الفترة** | زيادة / نقص وتقييم معدل النمو |
-        | **Reach خلال الفترة** | {reach_period if reach_period else 'تقدير بناءً على النشاط والميزانية'} |
-        | **Engagements خلال الفترة** | لايك / كومنت / شير / سيف |
-        | **Profile visits / Clicks** | {profile_visits if profile_visits else 'تقدير زوار البروفايل ونقرات الواتساب/الموقع'} |
-        | **تنوع المحتوى شهرياً** | {content_mix_input if content_mix_input else 'توزيع موصى به: كام ريل - كام كاروسيل - كام صورة - كام تكست'} |
-        | **أفضل ٥ Reels من حيث المشاهدات** | تحليل واستخراج أداء أفضل 5 ريلز |
-        | **أفضل ٥ بوستات من حيث التفاعل** | تحليل واستخراج أداء أفضل 5 بوستات تفاعلاً |
-        | **إحصائيات متقدمة بالفيديو** | Watch Time \| Average Play Time \| 3-second Views |
-        | **الجمهور الأساسي** | المدن / السن / النوع |
-        | **عدد الجمهور المتوقع للبراند** | {expected_audience if expected_audience else 'تقدير حجم السوق المستهدف'} |
-        | **صرف Meta Ads خلال الفترة** | {ad_spend} $ |
-        | **Objective للحملات** | (Messages/Leads/Calls/Traffic) |
-        | **عدد النتائج و Cost per result** | {ad_results if ad_results else 'تقدير النتائج وتكلفة النتيجة بناء على المجال'} |
+        - يوزر الحساب: instagram.com/{ig_handle}
+        - عدد المتابعين الحالي (من الداتا المسحوبة)
+        - نمو المتابعين تقديراً خلال الفترة
+        - Reach والـ Engagements المباشرة من التفاعلات
+        - Profile visits و Website/WhatsApp clicks تقديراً
+        - تنوع المحتوى شهرياً (العدد الفعلي المسحوب للريلز والكاروسيل والصور)
+        - أفضل ٥ Reels من حيث المشاهدات (عرض اللينكات وأعداد المشاهدات المسحوبة أوتوماتيكياً)
+        - أفضل ٥ بوستات من حيث التفاعل (عرض اللينكات والتفاعلات المسحوبة أوتوماتيكياً)
+        - إحصائيات متقدمة بالفيديو (Watch Time, Average Play Time, 3-sec Views)
+        - الجمهور الأساسي وحجم الجمهور المتوقع للبراند في {geo_coverage}
+        - تحليل Meta Ads (الميزانية {ad_spend}$، الهدف الموصى به، النتائج المتوقعة، و Cost per result)
 
         ### Audience Analysis
-        * **كم ساعة يقضي المستخدم على السوشيال ميديا؟**: (من DataReportal لدولة {geo_coverage})
-        * **ترتيب المنصات في البلد؟**: (من DataReportal لدولة {geo_coverage})
-        * **نوع المحتوى المفضل؟**: (من DataReportal)
-        * **نسبة ذكور / إناث**: (من platform insights / DataReportal)
-        * **الفئة العمرية وأهم المدن**:
-        * **المستوى الإقتصادي**:
-        * **المشاكل**: (من AnswerThePublic / الجروبات / الكومنتات: {market_insights})
-        * **الاهتمامات ودوافع الشراء**: (من Meta Insights والكومنتات)
-        * **المؤثرين المناسبين**:
-        * **سلوك المستخدم على Facebook**:
-        * **نوع المحتوى المفضل على Instagram (Explore)**:
-        * **نوع الفيديوهات والتريند على TikTok (Creative Center)**:
-        * **طريقة الشراء وسرعة القرار**: (أونلاين/أوفلاين - سريع/بياخد وقت)
-        * **الاعتراضات وعوامل الثقة (إيه اللي يطمنه)**:
+        - كم ساعة يقضي المستخدم على السوشيال ميديا في {geo_coverage} (من DataReportal)
+        - ترتيب المنصات ونوع المحتوى المفضل في {geo_coverage} (من DataReportal)
+        - نسبة ذكور / إناث، الفئات العمرية، أهم المدن، والمستوى الاقتصادي
+        - المشاكل والاعتراضات الشائعة في هذا المجال
+        - الاهتمامات ودوافع الشراء وسلوك المستخدم على FB و IG Explore و TikTok Creative Center
+        - طريقة الشراء وسرعة القرار وعوامل بناء الثقة
 
         ### competitor analysis (المنافس: {comp_name})
-        | البند | تفاصيل المنافس ({comp_name}) |
-        | :--- | :--- |
-        | **روابط المنافس** | الموقع: {comp_website} \| IG: {comp_ig} \| FB/Maps: {comp_fb} |
-        | **التغطية والجمهور المستهدف** | الدولة/المدينة - السن والنوع والمكان |
-        | **أقرب 3 خدمات/منتجات شبهنا** | 1. ... \| 2. ... \| 3. ... |
-        | **Positioning & Offer و USP** | تموضعه في السوق، العرض الرئيسي، والسبب المباشر لاختياره |
-        | **Proof و الباقات والأسعار** | أدلة إثبات الكلام، العروض/الباقات (Bundles)، وهل الأسعار معلنة؟ |
-        | **أقوى CTA وطريقة الوصول للـ Offer** | (واتساب / فورم / مكالمة / حجز أونلاين) وهل يطلب بيانات؟ |
-        | **Nurture وميزة الفانل** | (Auto-reply / رسائل / Newsletter) والميزة الواضحة |
-        | **تنوع المحتوى شهرياً و Tone of Voice** | تعليمي-أوفر-بروف-ترند + نبرة الصوت واستخدام UGC |
-        | **أفضل 5 Reels وأفضل 5 بوستات** | روابط/عناوين وViews وEngagements تقريبية |
-        | **أكثر 3 Topics و Content Gaps** | المواضيع المتكررة والفجوات التي أهملها المنافس |
-        | **Meta Ad Library Analysis** | أمثلة الإعلانات، أقوى Angle، نوع الكرياتيف، والعروض المتكررة |
-        | **Google Ratings والريفيوز** | التقييم، عدد الريفيوز، أهم 3 إيجابيات، أهم 3 سلبيات، وأسلوب وسرعة الرد |
-        | **ملخص المقارنة والقرارات** | **نقط تفوقنا عليه**: (1-3 نقاط) <br> **نقط تفوقه علينا**: (1-3 نقاط) <br> **فرصة Quick Win**: ... |
+        - يوزر المنافس: instagram.com/{comp_ig}
+        - التغطية والجمهور المستهدف وأقرب 3 خدمات شبهنا
+        - Positioning & Offer, USP, Proofs, الباقات، والأسعار هل معلنة أم لا
+        - أقوى CTA وطريقة الوصول للـ Offer والفانل والـ Nurture
+        - تنوع المحتوى شهرياً ونبرة الصوت Tone of Voice
+        - أفضل 5 Reels من حيث المشاهدات وأفضل 5 بوستات للمنافس (من الداتا المسحوبة أوتوماتيكياً)
+        - أكثر 3 Topics متكررة و Content Gaps
+        - Meta Ad Library Analysis (الأنجلات الإعلانية والكرياتيف)
+        - تقييمات جوجل والريفيوز وأسلوب الرد
+        - ملخص المقارنة: (3 نقاط تفوقنا - 3 نقاط تفوقه - فرصة Quick win)
 
         ### SWOT Analysis
-        * **Strengths (نقاط القوة)**:
-        * **Weaknesses (نقاط الضعف)**:
-        * **Opportunities (الفرص)**:
-        * **Threats (التهديدات)**:
+        - Strengths, Weaknesses, Opportunities, Threats
 
         ---
 
         ## 2- Customer journey
-
-        * **درجة الوعي (Awareness Level)**:
-          - هل هو غير واعي بالمشكلة؟
-          - هل هو واعي بالمشكلة فقط؟
-          - هل هو واعي بالحل؟
-          - هل هو واعي بالبراند نفسه؟
-        * **رحلة العميل (Customer Journey)**:
-          - أول نقطة احتكاك:
-          - ماذا يفعل قبل الشراء؟ (تسلسل الأسئلة والترددات)
-          - ما الذي يمنعه من القرار؟ (اعتراضات الجمهور)
-          - ما الذي يدفعه للقرار النهائي؟ (آخر خطوة قبل الشراء)
+        - درجة الوعي (Awareness Levels: Unaware, Problem Aware, Solution Aware, Brand Aware)
+        - رحلة العميل (أول نقطة احتكاك -> ما قبل الشراء -> الاعتراضات -> القرار النهائي)
 
         ---
 
         ## 3- Objectives + key results (KPI)
-
-        * **بيانات الهدف**: الهدف الرئيسي: {main_objective} \| المنتج: {product_service} \| السوق: {geo_coverage} \| المدة: (30/60/90 يوم)
-        * **الأهداف الاستراتيجية (3 أهداف SMART + الـ KPI لكل هدف)**:
-          1. **الهدف الأول**: ... (KPI الرئيسي: ...)
-          2. **الهدف الثاني**: ... (KPI الرئيسي: ...)
-          3. **الهدف الثالث**: ... (KPI الرئيسي: ...)
+        - الهدف الرئيسي والمنتج والسوق والمدة (30/60/90 يوم)
+        - 3 أهداف استراتيجية SMART + الـ KPI الأساسي لكل هدف
 
         ---
 
         ## 4- Customer (Segment & Buyer Persona)
-
-        قم بتحديد 4 Segments تفصيلية تشمل: (Interest or need + location + Age and gender + Pain Point + Decision Trigger):
-        1. **Segment 1**:
-        2. **Segment 2**:
-        3. **Segment 3**:
-        4. **Segment 4**:
+        - تحديد 4 Segments تفصيلية تشمل: (Interest/Need + Location + Age & Gender + Pain Point + Decision Trigger)
         """
 
         try:
-            ai_response = model.generate_content(full_output_prompt)
-            st.success("✅ تم استخراج التقرير بالكامل وحفظ الجداول!")
+            ai_response = model.generate_content(prompt)
+            st.success("✅ تم جلب البيانات أوتوماتيكياً وتوليد التقرير بنجاح!")
             st.markdown(ai_response.text)
             
             try:
                 db_payload = {
                     "brand_name": brand_name,
                     "inputs": {"geo": geo_coverage, "objective": main_objective, "ad_spend": ad_spend},
-                    "scraped_data": json.loads(json.dumps(scraped_data, default=str)),
+                    "scraped_data": json.loads(json.dumps(brand_parsed, default=str)),
                     "strategy_output": str(ai_response.text)
                 }
                 supabase.table("strategy_projects").insert(db_payload).execute()
