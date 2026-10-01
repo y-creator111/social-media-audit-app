@@ -89,7 +89,7 @@ def inject_custom_css():
 
     div.stButton > button, div[data-testid="stForm"] button {
         width: 100% !important;
-        background-color: ff94bd !important;
+        background-color: #FF94BD !important;
         color: #000000 !important;
         font-weight: 700 !important;
         font-size: 1.05rem !important;
