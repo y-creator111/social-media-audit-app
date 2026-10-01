@@ -89,14 +89,14 @@ def inject_custom_css():
 
     div.stButton > button, div[data-testid="stForm"] button {
         width: 100% !important;
-        background-color: #2563EB !important;
-        color: #FFFFFF !important;
+        background-color: ff94bd !important;
+        color: #000000 !important;
         font-weight: 700 !important;
         font-size: 1.05rem !important;
         border-radius: 8px !important;
         padding: 12px 24px !important;
         border: none !important;
-        box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2) !important;
+        box-shadow: 0 4px 6px -1px rgba(255, 182, 193, 0.2) !important;
     }
 
     .stTabs [data-baseweb="tab-list"] {
@@ -188,7 +188,7 @@ def parse_and_extract_links(items):
 
 # Navigation Sidebar
 st.sidebar.markdown("### 📁 Projects Management")
-project_mode = st.sidebar.radio("Want 🙄", ["New Project", "View History"])
+project_mode = st.sidebar.radio("?! 🙄", ["New Project", "View History"])
 
 if project_mode == "New Project":
     with st.form("audit_form_90days_links"):
