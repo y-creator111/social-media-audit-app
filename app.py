@@ -16,7 +16,7 @@ def init_services():
     
     supabase = create_client(supabase_url, supabase_key)
     genai.configure(api_key=gemini_key)
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    model = genai.GenerativeModel('gemini-3.8-flash')
     apify = ApifyClient(apify_key)
     return supabase, model, apify
 
