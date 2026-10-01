@@ -153,8 +153,8 @@ except Exception as e:
 # Custom Header Banner
 st.markdown("""
 <div class="main-header">
-    <h1>📊 Strategy Mentoring - أداة الـ Audit والاستراتيجية الكاملة</h1>
-    <p>تحليل كامل ومقارنة شاملة لآخر ٩٠ يومًا مع استخراج كافة الروابط والمؤشرات</p>
+    <h1>📊 Marketing Strategy Audit Tool</h1>
+    <p>MADE BY YASMINE 🩷</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -187,10 +187,10 @@ def parse_and_extract_links(items):
     }
 
 # Navigation Sidebar
-st.sidebar.markdown("### 📁 إدارة المشاريع")
-project_mode = st.sidebar.radio("اختر النمط المطلوبة:", ["مشروع جديد", "استعراض المشاريع السابقة"])
+st.sidebar.markdown("### 📁 Projects Management")
+project_mode = st.sidebar.radio("Want 🙄", ["New Project", "View History"])
 
-if project_mode == "مشروع جديد":
+if project_mode == "New Project":
     with st.form("audit_form_90days_links"):
         
         tab1, tab2, tab3 = st.tabs(["1️⃣ بيانات البراند الرئيسي", "2️⃣ المنافسين (1 و 2)", "3️⃣ أداء الإعلانات والجمهور"])
@@ -249,10 +249,10 @@ if project_mode == "مشروع جديد":
             with c_m2:
                 market_notes = st.text_area("أبحاث الجمهور، الكومنتات، المشاكل، والاعتراضات من الجروبات والتقييمات")
 
-        submitted = st.form_submit_button("🚀 بدء السحب واستخرج التقرير الشامل بكافة الروابط (90 يومًا)")
+        submitted = st.form_submit_button("🚀 RUN TASK")
 
     if submitted and brand_name and brand_ig and comp1_name and comp2_name:
-        st.info("🔄 جاري سحب المنشورات والروابط المباشرة أوتوماتيكياً عبر Apify...")
+        st.info("🔄 WORKING ON IT 🫩...")
         
         brand_parsed_links = {}
         try:
@@ -267,7 +267,7 @@ if project_mode == "مشروع جديد":
         comp1_ad_library_url = f"https://www.facebook.com/ads/library/?active_status=all&ad_type=all&q={comp1_name.replace(' ', '%20')}"
         comp2_ad_library_url = f"https://www.facebook.com/ads/library/?active_status=all&ad_type=all&q={comp2_name.replace(' ', '%20')}"
 
-        st.info("🧠 جاري إعداد التقرير المكتمل وإدراج كافة الروابط القابلة للنقر...")
+        st.info("🧠 REPORT WILL BE DONE 🤌🏻...")
 
         strict_prompt_with_links = f"""
         أنت Senior Brand Strategist & Growth Director. قم بإجراء Audit كامل واستخراج استراتيجية متكاملة للبراند '{brand_name}' عن فترة **آخر 90 يومًا فقط**.
@@ -381,7 +381,7 @@ if project_mode == "مشروع جديد":
 
         try:
             ai_response = model.generate_content(strict_prompt_with_links)
-            st.success("✅ تم استخراج التقرير الاستراتيجي المكتمل بكافة الروابط القابلة للنقر بنجاح!")
+            st.success("✅ STRATEGY REPORT DONE!")
             st.markdown(ai_response.text)
             
             try:
@@ -398,14 +398,14 @@ if project_mode == "مشروع جديد":
                     "strategy_output": str(ai_response.text)
                 }
                 supabase.table("strategy_projects").insert(db_payload).execute()
-                st.info("💾 تم حفظ التقرير والمشروع والروابط في قاعدة البيانات.")
+                st.info("💾 SAVED IM DATABASE.")
             except Exception as db_err:
                 pass
         except Exception as ai_err:
-            st.error(f"❌ حدث خطأ أثناء التوليد: {str(ai_err)}")
+            st.error(f"❌ ERROR: {str(ai_err)}")
 
-elif project_mode == "استعراض المشاريع السابقة":
-    st.header("📂 المشاريع المحفوظة")
+elif project_mode == "View History":
+    st.header("📂 Saved Projects")
     try:
         response = supabase.table("strategy_projects").select("*").order("created_at", descending=True).execute()
         projects = response.data
