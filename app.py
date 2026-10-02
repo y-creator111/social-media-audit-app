@@ -6,7 +6,7 @@ import json
 import datetime
 
 # ---------------------------------------------------------
-# 1. Page Configuration & Professional RTL Styling
+# 1. Page Configuration & Custom Styling
 # ---------------------------------------------------------
 st.set_page_config(
     page_title="Social Media Audit & Strategy Engine",
@@ -20,7 +20,6 @@ def inject_custom_css():
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap');
 
-    /* Global Direction & Typography */
     html, body, [class*="css"], .stMarkdown, p, div, input, textarea, label, span {
         font-family: 'Cairo', sans-serif !important;
         direction: rtl !important;
@@ -33,7 +32,6 @@ def inject_custom_css():
         background-color: #F8FAFC;
     }
 
-    /* Sidebar Styling */
     section[data-testid="stSidebar"] {
         direction: rtl !important;
         text-align: right !important;
@@ -41,39 +39,28 @@ def inject_custom_css():
         border-left: 1px solid #E2E8F0 !important;
     }
 
-    /* Header Styling */
     .main-header {
         background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%);
-        padding: 28px;
+        padding: 24px;
         border-radius: 12px;
         color: #FFFFFF;
-        margin-bottom: 24px;
-        box-shadow: 0 10px 15px -3px rgba(15, 23, 42, 0.08);
+        margin-bottom: 20px;
     }
     
     .main-header h1 {
         color: #FFFFFF !important;
         font-weight: 800 !important;
-        font-size: 1.8rem !important;
-        margin: 0 0 8px 0 !important;
+        font-size: 1.6rem !important;
+        margin: 0 0 6px 0 !important;
     }
 
-    .main-header p {
-        color: #94A3B8 !important;
-        margin: 0 !important;
-        font-size: 0.95rem !important;
-    }
-
-    /* Forms & Containers */
     div[data-testid="stForm"] {
         background-color: #FFFFFF !important;
         border: 1px solid #E2E8F0 !important;
         border-radius: 12px !important;
-        padding: 24px !important;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.03) !important;
+        padding: 20px !important;
     }
 
-    /* Button Styling */
     div.stButton > button, div[data-testid="stForm"] button {
         width: 100% !important;
         background-color: #2563EB !important;
@@ -81,23 +68,8 @@ def inject_custom_css():
         font-weight: 700 !important;
         font-size: 1.05rem !important;
         border-radius: 8px !important;
-        padding: 12px 24px !important;
-        border: none !important;
-        box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2) !important;
-    }
-
-    /* Tabs Styling */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 8px !important;
-        direction: rtl !important;
-        border-bottom: 2px solid #E2E8F0 !important;
-    }
-
-    .stTabs [data-baseweb="tab"] {
-        border-radius: 8px 8px 0 0 !important;
         padding: 10px 20px !important;
-        font-weight: 700 !important;
-        color: #64748B !important;
+        border: none !important;
     }
 
     .stTabs [aria-selected="true"] {
@@ -121,7 +93,6 @@ def init_services():
     
     supabase = create_client(supabase_url, supabase_key)
     genai.configure(api_key=gemini_key)
-    # تعديل اسم النموذج إلى gemini-3.8-flash المعتمد في الحساب
     model = genai.GenerativeModel('gemini-3.8-flash')
     apify = ApifyClient(apify_key)
     return supabase, model, apify
@@ -129,83 +100,52 @@ def init_services():
 try:
     supabase, model, apify = init_services()
 except Exception as e:
-    st.error("⚠️ خطأ في الاتصال بالخدمات السحابية. يرجى التأكد من ضبط الـ Secrets في Streamlit.")
+    st.error("⚠️ خطأ في الاتصال بالخدمات السحابية. يرجى التأكد من ضبط الـ Secrets.")
 
 # ---------------------------------------------------------
-# 3. Data Collection Functions (Apify & Meta Ad Library)
+# 3. Flexible Scraping Logic (Handles IG or FB links)
 # ---------------------------------------------------------
-def scrape_instagram_account(profile_url, account_type="brand"):
-    """Scrapes raw Instagram profile and post data via Apify with safety timeouts."""
-    if not profile_url:
-        return {"source": "apify", "account_type": account_type, "profile_url": "", "posts": [], "status": "no_url_provided"}
+def scrape_social_account(url, account_type="brand"):
+    """Safely scrapes data if URL is Instagram, or structures metadata if Facebook/Web."""
+    if not url:
+        return {"source": "manual", "account_type": account_type, "url": "", "posts": []}
     
-    cleaned_handle = profile_url.replace("https://instagram.com/", "").replace("https://www.instagram.com/", "").replace("/", "").strip()
-    
-    try:
-        run_input = {
-            "directUrls": [f"https://www.instagram.com/{cleaned_handle}/"],
-            "resultsType": "posts",
-            "searchLimit": 30
-        }
-        run = apify.actor("apify/instagram-post-scraper").call(run_input=run_input, timeout_secs=30)
-        items = apify.dataset(run["defaultDatasetId"]).list_items().items
-        
-        cleaned_posts = []
-        for item in items:
-            cleaned_posts.append({
-                "post_id": item.get("id"),
-                "url": item.get("url") or item.get("postUrl"),
-                "timestamp": item.get("timestamp"),
-                "type": item.get("type"),
-                "likes_count": item.get("likesCount"),
-                "comments_count": item.get("commentsCount"),
-                "video_view_count": item.get("videoViewCount") or item.get("playCount"),
-                "caption": (item.get("caption") or "")[:200]
-            })
+    # Check if Instagram
+    if "instagram.com" in url.lower():
+        cleaned_handle = url.replace("https://instagram.com/", "").replace("https://www.instagram.com/", "").replace("/", "").strip()
+        try:
+            run_input = {
+                "directUrls": [f"https://www.instagram.com/{cleaned_handle}/"],
+                "resultsType": "posts",
+                "searchLimit": 15
+            }
+            run = apify.actor("apify/instagram-post-scraper").call(run_input=run_input)
+            items = apify.dataset(run["defaultDatasetId"]).list_items().items
             
-        return {
-            "source": "apify",
-            "account_type": account_type,
-            "profile_url": f"https://www.instagram.com/{cleaned_handle}/",
-            "posts": cleaned_posts,
-            "status": "success"
-        }
-    except Exception as e:
-        return {
-            "source": "apify",
-            "account_type": account_type,
-            "profile_url": profile_url,
-            "posts": [],
-            "status": f"error: {str(e)}"
-        }
-
-def collect_meta_ad_library(brand_name, comp1_name, comp2_name):
-    """Structures verified Meta Ad Library query pointers."""
-    ad_data = []
-    entities = [("brand", brand_name), ("competitor_1", comp1_name), ("competitor_2", comp2_name)]
-    
-    for entity_type, name in entities:
-        if name:
-            ad_url = f"https://www.facebook.com/ads/library/?active_status=all&ad_type=all&q={name.replace(' ', '%20')}"
-            ad_data.append({
-                "entity_type": entity_type,
-                "advertiser_name": name,
-                "ad_library_search_url": ad_url,
-                "ads_found": []
-            })
-            
-    return {
-        "source": "meta_ad_library",
-        "ads": ad_data
-    }
+            cleaned_posts = []
+            for item in items:
+                cleaned_posts.append({
+                    "url": item.get("url") or item.get("postUrl"),
+                    "type": item.get("type"),
+                    "likes": item.get("likesCount"),
+                    "comments": item.get("commentsCount"),
+                    "views": item.get("videoViewCount") or item.get("playCount"),
+                    "caption": (item.get("caption") or "")[:150]
+                })
+            return {"source": "apify_instagram", "account_type": account_type, "url": url, "posts": cleaned_posts}
+        except Exception:
+            return {"source": "instagram_link", "account_type": account_type, "url": url, "posts": []}
+    else:
+        # Facebook or Website link
+        return {"source": "facebook_or_web_link", "account_type": account_type, "url": url, "posts": []}
 
 # ---------------------------------------------------------
-# 4. Streamlit User Interface
+# 4. Streamlit UI
 # ---------------------------------------------------------
 st.markdown("""
 <div class="main-header">
-    <h1>🎯 محرك الـ Audit والاستراتيجية المحمي ضد التخمين</h1>
-    <p>جمع واستخراج آلي للبيانات عبر Apify و Meta Ad Library مع تحليل دقيق ممتثل للشرط الصارم</p>
+    <h1>🎯 أداة الـ Audit والاستراتيجية المرنة</h1>
+    <p>يدعم أي منصة (Facebook أو Instagram) مع تخصيص كامل لأهداف الحملات والبيانات</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -213,172 +153,130 @@ st.sidebar.markdown("### 📂 إدارة المشاريع")
 project_mode = st.sidebar.radio("اختر النمط المطلوب:", ["مشروع جديد", "استعراض المشاريع السابقة"])
 
 if project_mode == "مشروع جديد":
-    with st.form("audit_engine_form"):
-        tab1, tab2 = st.tabs(["1️⃣ روابط المنصات وحسابات التحليل", "2️⃣ البيانات الداخلية (اختياري)"])
+    with st.form("flexible_audit_form"):
+        tab1, tab2 = st.tabs(["1️⃣ حسابات البراند والمنافسين", "2️⃣ بيانات الإعلانات والأداء الداخلي (اختياري)"])
         
         with tab1:
             col1, col2 = st.columns(2)
             with col1:
                 brand_name = st.text_input("اسم البراند الرئيسي *", placeholder="مثال: Brand X")
-                brand_ig_url = st.text_input("رابط إنستجرام البراند الرئيسي *", placeholder="https://www.instagram.com/brand")
+                brand_url = st.text_input("رابط البراند الرئيسي (Instagram أو Facebook) *")
+                timeframe_choice = st.selectbox("فترة التحليل المحددة:", ["آخر 90 يومًا", "آخر 60 يومًا", "آخر 30 يومًا", "تحليل عام لآخر المنشورات"])
             with col2:
-                comp1_ig_url = st.text_input("رابط إنستجرام المنافس الأول *", placeholder="https://www.instagram.com/comp1")
-                comp2_ig_url = st.text_input("رابط إنستجرام المنافس الثاني *", placeholder="https://www.instagram.com/comp2")
-                comp1_name = st.text_input("اسم المنافس الأول", placeholder="Competitor 1")
-                comp2_name = st.text_input("اسم المنافس الثاني", placeholder="Competitor 2")
+                comp1_name = st.text_input("اسم المنافس الأول *")
+                comp1_url = st.text_input("رابط المنافس الأول (أي منصة: IG / FB / Web) *")
+                comp2_name = st.text_input("اسم المنافس الثاني (اختياري)")
+                comp2_url = st.text_input("رابط المنافس الثاني (اختياري: IG / FB / Web)")
         
         with tab2:
-            st.caption("أدخل الأرقام المتاحة فقط من لوحة التحليلات الداخلية، واترك باقي الحقول فارغة:")
-            c1, c2, c3 = st.columns(3)
+            st.caption("أدخل البيانات المتاحة لديك فقط، واترك باقي الحقول فارغة:")
+            c1, c2 = st.columns(2)
             with c1:
-                in_reach = st.number_input("الوصول (Reach)", min_value=0, value=0)
-                in_spend = st.number_input("الإنفاق الإعلاني ($)", min_value=0.0, value=0.0)
+                ad_spend = st.number_input("الإنفاق الإعلاني ($)", min_value=0.0, value=0.0)
+                ad_objective = st.selectbox("هدف الحملة الإعلانية الرئيسي:", [
+                    "لم يتم إجراء إعلانات", 
+                    "رسائل (Messages)", 
+                    "عملاء محتملين (Leads)", 
+                    "زيارات موقع / واتساب (Traffic)", 
+                    "تفاعل (Engagement)", 
+                    "مبيعات / شراء (Sales/Purchases)", 
+                    "مكالمات (Calls)"
+                ])
+                ad_results_count = st.number_input("عدد النتائج المتحققة (عدد الرسائل/الليدز/الزيارات)", min_value=0, value=0)
+                cost_per_result = st.number_input("تكلفة النتيجة الواحدة ($ Cost Per Result)", min_value=0.0, value=0.0)
+            
             with c2:
-                in_clicks = st.number_input("نقرات الموقع / الواتساب", min_value=0, value=0)
-                in_leads = st.number_input("عدد العملاء المحتملين (Leads)", min_value=0, value=0)
-            with c3:
-                in_sales = st.number_input("إجمالي المبيعات / الشراء", min_value=0, value=0)
-                in_watch_time = st.text_input("ساعات المشاهدة (Watch Time)")
+                in_reach = st.number_input("الوصول الإجمالي (Reach) - إن وجد", min_value=0, value=0)
+                in_clicks = st.number_input("نقرات الموقع / الواتساب - إن وجد", min_value=0, value=0)
+                watch_time_input = st.text_input("ساعات المشاهدة (Watch Time) - اختياري لحسابات الفيديو فقط")
 
-        submitted = st.form_submit_button("🚀 بدء جمع البيانات التلقائي وتشغيل الـ Audit")
+        submitted = st.form_submit_button("🚀 بدء تحليل الحسابات وتوليد الـ Audit")
 
-    if submitted and brand_name and brand_ig_url:
-        # Time and metadata
-        now = datetime.datetime.now()
-        collected_at = now.strftime("%Y-%m-%d %H:%M:%S")
-        analysis_end = now.strftime("%Y-%m-%d")
-        analysis_start = (now - datetime.timedelta(days=90)).strftime("%Y-%m-%d")
+    if submitted and brand_name and brand_url:
+        st.info("🔄 1/2 جاري فحص وسحب منشورات الحسابات المتاحة...")
+        
+        brand_data = scrape_social_account(brand_url, "brand")
+        comp1_data = scrape_social_account(comp1_url, "competitor_1") if comp1_url else {"posts": []}
+        comp2_data = scrape_social_account(comp2_url, "competitor_2") if comp2_url else {"posts": []}
 
-        # 1. Scrape Apify
-        st.info("🔄 1/3 جاري سحب المنشورات والحسابات تلقائياً عبر Apify...")
-        brand_data = scrape_instagram_account(brand_ig_url, "brand")
-        competitor_1_data = scrape_instagram_account(comp1_ig_url, "competitor") if comp1_ig_url else {"source": "apify", "posts": []}
-        competitor_2_data = scrape_instagram_account(comp2_ig_url, "competitor") if comp2_ig_url else {"source": "apify", "posts": []}
+        # Structure Internal Metrics dynamically based ONLY on user inputs
+        internal_metrics = {}
+        if ad_spend > 0 or ad_objective != "لم يتم إجراء إعلانات":
+            internal_metrics["ads_performance"] = {
+                "spend": ad_spend,
+                "objective": ad_objective,
+                "results_count": ad_results_count,
+                "cost_per_result": cost_per_result
+            }
+        if in_reach > 0:
+            internal_metrics["reach"] = in_reach
+        if in_clicks > 0:
+            internal_metrics["clicks"] = in_clicks
+        if watch_time_input:
+            internal_metrics["watch_time"] = watch_time_input
 
-        # 2. Collect Ad Library Data
-        st.info("🔍 2/3 جاري ربط وتجميع روابط وسجلات Meta Ad Library...")
-        ad_library_data = collect_meta_ad_library(brand_name, comp1_name, comp2_name)
-
-        # 3. Format Internal Metrics JSON
-        internal_metrics = {
-            "instagram_insights": {"reach": in_reach, "clicks": in_clicks, "watch_time": in_watch_time} if (in_reach or in_clicks or in_watch_time) else [],
-            "meta_ads_manager": {"spend": in_spend, "leads": in_leads, "purchases": in_sales} if (in_spend or in_leads or in_sales) else [],
-            "tiktok_analytics": [],
-            "google_analytics": [],
-            "crm": [],
-            "sales": []
-        }
-
-        # JSON Serialization
+        # Serialize Data to JSON
         brand_data_json = json.dumps(brand_data, ensure_ascii=False, default=str)
-        competitor_1_data_json = json.dumps(competitor_1_data, ensure_ascii=False, default=str)
-        competitor_2_data_json = json.dumps(competitor_2_data, ensure_ascii=False, default=str)
-        ad_library_data_json = json.dumps(ad_library_data, ensure_ascii=False, default=str)
+        comp1_data_json = json.dumps(comp1_data, ensure_ascii=False, default=str)
+        comp2_data_json = json.dumps(comp2_data, ensure_ascii=False, default=str)
         internal_metrics_json = json.dumps(internal_metrics, ensure_ascii=False, default=str)
 
-        # 4. Construct Strict System Prompt
-        st.info("🧠 3/3 جاري تحليل الداتا وتعبئة التقرير الشامل عبر الذكاء الاصطناعي...")
+        st.info("🧠 2/2 جاري إعداد التقرير المخصص بناءً على معطياتك الفعلية...")
 
-        analysis_prompt = f"""أنت محلل محترف في Social Media Audit وBrand Strategy.
+        analysis_prompt = f"""أنت استشاري خبير في Social Media Audit وBrand Strategy.
 
-ستقوم بتحليل بيانات حقيقية تم جمعها تلقائيًا من:
-1. Apify للمنشورات والحسابات العامة.
-2. Meta Ad Library للإعلانات العامة.
-3. أي بيانات داخلية متاحة داخل النظام.
+قم بإجراء تحليل حقيقي ودقيق بناءً على المعطيات والروابط المجمعة التالية:
 
-اسم البراند: {brand_name}
-فترة التحليل: من {analysis_start} إلى {analysis_end}
-تاريخ جمع البيانات: {collected_at}
+اسم البراند الرئيسي: {brand_name} (الرابط: {brand_url})
+فترة التحليل المطلوبة: {timeframe_choice}
 
 بيانات البراند:
 {brand_data_json}
 
-بيانات المنافس الأول:
-{competitor_1_data_json}
+بيانات المنافس الأول ({comp1_name}):
+{comp1_data_json}
 
-بيانات المنافس الثاني:
-{competitor_2_data_json}
+بيانات المنافس الثاني ({comp2_name if comp2_name else 'لا يوجد منافس ثاني'}):
+{comp2_data_json}
 
-إعلانات Meta Ad Library:
-{ad_library_data_json}
-
-البيانات الداخلية المتاحة:
+البيانات الإعلانية والداخلية المدخلة صراحةً من المستخدم:
 {internal_metrics_json}
 
-قواعد أساسية لا يمكن مخالفتها:
-1. استخدم البيانات الموجودة في المدخلات فقط.
-2. ممنوع اختلاق أي:
-- أرقام - روابط - مشاهدات - وصول - إنفاق - عملاء - مبيعات - نتائج حملات - أعمار جمهور - مدن - أسماء حملات - تقييمات - معلومات عن المنافسين
-3. إذا لم توجد المعلومة، اكتب: "غير متاح في البيانات المجمعة".
-4. لا تستخدم عدد الإعجابات كبديل لعدد المشاهدات.
-5. لا تستخدم عدد التعليقات كبديل لعدد المشاركات أو الحفظ.
-6. إذا كانت المشاهدات غير متاحة، لا تحسب متوسط مشاهدات.
-7. لا تقل إن إعلانًا ناجح لمجرد ظهوره في Meta Ad Library.
-8. لا تقل إن المنافس أنفق مبلغًا معينًا إلا إذا كان الرقم موجودًا صراحةً في البيانات المرسلة.
-9. لا تعتبر Meta Ad Library مصدرًا لنتائج الحملات أو عدد العملاء أو المبيعات.
-10. Meta Ad Library تستخدم فقط لتحليل المعلومات الظاهرة عن الإعلان، مثل:
-- نص الإعلان - العنوان - الوصف - الدعوة لاتخاذ إجراء - نوع التصميم - تاريخ بدء الإعلان - تاريخ انتهاء الإعلان إن وجد - المنصات - الرابط العام للإعلان - الرابط المقصود إن وجد
-11. لا تعرض أي رابط إلا إذا كان موجودًا فعلًا في البيانات.
-12. إذا كان الرابط غير موجود، اكتب: "لا يوجد رابط متاح".
-13. لا تقل إن التحليل يغطي آخر 90 يومًا إلا إذا كان كل منشور يحمل تاريخًا وتمت فلترته فعليًا داخل الفترة.
-14. لا تستخدم أي معلومة من معرفتك العامة عن البراند أو المنافسين باعتبارها حقيقة.
-15. افصل بين:
-- بيانات مؤكدة - أرقام محسوبة - استنتاجات - فرضيات - توصيات
-16. كل استنتاج يجب أن يوضح الدليل الذي بُني عليه.
-17. كل توصية يجب أن تكون عملية وقابلة للتنفيذ.
-18. كل توصية يجب أن تحتوي على:
-- الإجراء المطلوب - السبب - الدليل - مدة التنفيذ - مؤشر قياس النجاح
-19. إذا كانت البيانات قليلة أو ناقصة، اخفض مستوى الثقة واكتب السبب.
-20. لا تعرض تقريرًا عامًا أو إنشائيًا لا يرتبط بالبيانات.
-21. لا تكرر المعلومات نفسها في أكثر من قسم.
-22. لا تستخدم لغة مؤكدة عند وجود نقص في البيانات.
+قواعد صارمة للتحليل:
+1. التزم بالمنصات والروابط المذكورة. إذا كان رابط المنافس فيسبوك وليس إنستجرام، حلل أداءه كصفحة فيسبوك ولا تطلب رابط إنستجرام.
+2. لا تفرض أن هدف الإعلانات هو Leads أو Purchases إلا إذا اختار المستخدم ذلك صراحةً. اعتمد هدف الحملة المختار ({ad_objective}).
+3. لا تطبع تواريخ أو فترات زمنية تلقائية لم يطلبها المستخدم، واعتمد الفترة المحددة: ({timeframe_choice}).
+4. إذا كانت الخانات الاختيارية (مثل ساعات المشاهدة Watch Time أو أرقام الوصول) غير مدخلة، اكتب "غير مدخلة ضمن البيانات الداخلية" ولا تخترع أرقاماً لها.
+5. لا تعرض أي رابط إلا إذا كان موجوداً بالفعل في المدخلات.
 
-استخدم:
-- تشير البيانات المتاحة إلى...
-- يبدو من المنشورات المتاحة...
-- يمكن اختبار فرضية...
-- لا يمكن التأكد من ذلك من البيانات الحالية...
-
-احسب فقط المؤشرات التي يمكن حسابها من البيانات الموجودة. مثلًا:
-- عدد المنشورات - عدد المنشورات حسب النوع - متوسط الإعجابات إذا كانت الإعجابات موجودة - متوسط التعليقات إذا كانت التعليقات موجودة - متوسط المشاهدات إذا كانت المشاهدات موجودة - معدل التفاعل فقط إذا كانت عناصر المعادلة متاحة - أعلى المنشورات حسب المقياس المتاح فعلًا.
-
-إذا كان هناك أكثر من مصدر لنفس المعلومة، اختر المصدر الأكثر مباشرة، واذكر التعارض إذا اختلفت القيم.
-
-أخرج التقرير باللغة العربية وبأسلوب واضح ومناسب لصاحب عمل غير متخصص، مستخدماً تنسيق Markdown منظم جداً ويحتوي على كافة الأقسام التالية بالترتيب:
-
-أولًا: الملخص التنفيذي
-ثانيًا: نطاق التحليل وجودة البيانات
-ثالثًا: تحليل البراند
-رابعًا: تحليل المنافس الأول
-خامسًا: تحليل المنافس الثاني
-سادسًا: مقارنة البراند بالمنافسين
-سابعًا: تحليل إعلانات Meta Ad Library (مع إضافة الملاحظة الإلزامية)
-ثامنًا: تحليل الأداء الداخلي
-تاسعًا: تحليل المحتوى
-عاشرًا: SWOT
-الحادي عشر: استراتيجية 30 و60 و90 يومًا
-الثاني عشر: خطة المحتوى
-الثالث عشر: خطة الاختبارات
-الرابع عشر: البيانات المطلوبة مستقبلًا
-الخامس عشر: الخلاصة
+أخرج التقرير باللغة العربية وبأسلوب منظم وشامل يغطي الأقسام التالية:
+أولًا: نطاق التحليل والمنصات المفتوحة
+ثانيًا: الوضع الحالي للحسابات وتنوع المحتوى (Situation Analysis)
+ثالثًا: تحليل المنافسين (المنافس الأول والمنافس الثاني إن وجد)
+رابعًا: تحليل الإعلانات والأداء الداخلي (بناءً على هدف الحملة المختار)
+خامسًا: تحليل الجمهور وسلوك الشراء (Audience Analysis)
+سادسًا: مصفوفة SWOT (نقاط القوة، الضعف، الفرص، التهديدات)
+سابعًا: رحلة العميل (Customer Journey)
+ثامناً: الأهداف الاستراتيجية ومؤشرات الأداء (SMART Objectives & KPIs)
+تاسعًا: خطة العمل للـ 30 و60 و90 يومًا القادمة
+عاشرًا: شرائح الجمهور المستهدف (Buyer Personas)
 """
 
         try:
             ai_response = model.generate_content(analysis_prompt)
-            st.success("✅ تم إكمال الـ Audit بنجاح وتطبيق شروط الخصوصية وجودة البيانات!")
+            st.success("✅ تم استخراج التقرير بنجاح وفق معطياتك بالضبط!")
             st.markdown(ai_response.text)
 
-            # Save Audit Run to Supabase DB
             try:
                 db_payload = {
                     "brand_name": brand_name,
-                    "inputs": {"brand_url": brand_ig_url, "comp1": comp1_ig_url, "comp2": comp2_ig_url},
+                    "inputs": {"brand_url": brand_url, "comp1": comp1_url, "comp2": comp2_url, "timeframe": timeframe_choice},
                     "scraped_data": brand_data,
                     "strategy_output": str(ai_response.text)
                 }
                 supabase.table("strategy_projects").insert(db_payload).execute()
-                st.info("💾 تم حفظ التقرير بجدول `strategy_projects` في قاعدة البيانات.")
-            except Exception as db_err:
+                st.info("💾 تم حفظ التقرير في قاعدة البيانات.")
+            except Exception:
                 pass
         except Exception as ai_err:
             st.error(f"❌ حدث خطأ أثناء التوليد: {str(ai_err)}")
