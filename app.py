@@ -103,14 +103,13 @@ except Exception as e:
     st.error("⚠️ خطأ في الاتصال بالخدمات السحابية. يرجى التأكد من ضبط الـ Secrets.")
 
 # ---------------------------------------------------------
-# 3. Flexible Scraping Logic (Handles IG or FB links)
+# 3. Flexible Scraping Logic
 # ---------------------------------------------------------
 def scrape_social_account(url, account_type="brand"):
     """Safely scrapes data if URL is Instagram, or structures metadata if Facebook/Web."""
     if not url:
         return {"source": "manual", "account_type": account_type, "url": "", "posts": []}
     
-    # Check if Instagram
     if "instagram.com" in url.lower():
         cleaned_handle = url.replace("https://instagram.com/", "").replace("https://www.instagram.com/", "").replace("/", "").strip()
         try:
@@ -136,7 +135,6 @@ def scrape_social_account(url, account_type="brand"):
         except Exception:
             return {"source": "instagram_link", "account_type": account_type, "url": url, "posts": []}
     else:
-        # Facebook or Website link
         return {"source": "facebook_or_web_link", "account_type": account_type, "url": url, "posts": []}
 
 # ---------------------------------------------------------
@@ -145,7 +143,7 @@ def scrape_social_account(url, account_type="brand"):
 st.markdown("""
 <div class="main-header">
     <h1>🎯 أداة الـ Audit والاستراتيجية المرنة</h1>
-    <p>يدعم أي منصة (Facebook أو Instagram) مع تخصيص كامل لأهداف الحملات والبيانات</p>
+    <p>تحديد يدوي كامل للتواريخ والمنصات وأهداف الحملات دون أي فرض تلقائي</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -153,20 +151,28 @@ st.sidebar.markdown("### 📂 إدارة المشاريع")
 project_mode = st.sidebar.radio("اختر النمط المطلوب:", ["مشروع جديد", "استعراض المشاريع السابقة"])
 
 if project_mode == "مشروع جديد":
-    with st.form("flexible_audit_form"):
-        tab1, tab2 = st.tabs(["1️⃣ حسابات البراند والمنافسين", "2️⃣ بيانات الإعلانات والأداء الداخلي (اختياري)"])
+    with st.form("custom_dates_audit_form"):
+        tab1, tab2 = st.tabs(["1️⃣ حسابات البراند والمنافسين وفترة التحليل", "2️⃣ بيانات الإعلانات والأداء الداخلي (اختياري)"])
         
         with tab1:
             col1, col2 = st.columns(2)
             with col1:
                 brand_name = st.text_input("اسم البراند الرئيسي *", placeholder="مثال: Brand X")
-                brand_url = st.text_input("رابط البراند الرئيسي (Instagram أو Facebook) *")
-                timeframe_choice = st.selectbox("فترة التحليل المحددة:", ["آخر 90 يومًا", "آخر 60 يومًا", "آخر 30 يومًا", "تحليل عام لآخر المنشورات"])
+                brand_url = st.text_input("رابط البراند الرئيسي (Instagram / Facebook / Web) *")
+                
+                # تحديد التاريخ يدوياً برغبة المستخدم
+                st.markdown("**📅 تحديد نطاق تاريخ التحليل يدوياً:**")
+                date_col1, date_col2 = st.columns(2)
+                with date_col1:
+                    start_date = st.date_input("تاريخ البداية", value=datetime.date.today() - datetime.timedelta(days=90))
+                with date_col2:
+                    end_date = st.date_input("تاريخ النهاية", value=datetime.date.today())
+
             with col2:
                 comp1_name = st.text_input("اسم المنافس الأول *")
                 comp1_url = st.text_input("رابط المنافس الأول (أي منصة: IG / FB / Web) *")
                 comp2_name = st.text_input("اسم المنافس الثاني (اختياري)")
-                comp2_url = st.text_input("رابط المنافس الثاني (اختياري: IG / FB / Web)")
+                comp2_url = st.text_input("رابط المنافس الثاني (اختياري)")
         
         with tab2:
             st.caption("أدخل البيانات المتاحة لديك فقط، واترك باقي الحقول فارغة:")
@@ -182,13 +188,13 @@ if project_mode == "مشروع جديد":
                     "مبيعات / شراء (Sales/Purchases)", 
                     "مكالمات (Calls)"
                 ])
-                ad_results_count = st.number_input("عدد النتائج المتحققة (عدد الرسائل/الليدز/الزيارات)", min_value=0, value=0)
+                ad_results_count = st.number_input("عدد النتائج المتحققة", min_value=0, value=0)
                 cost_per_result = st.number_input("تكلفة النتيجة الواحدة ($ Cost Per Result)", min_value=0.0, value=0.0)
             
             with c2:
                 in_reach = st.number_input("الوصول الإجمالي (Reach) - إن وجد", min_value=0, value=0)
                 in_clicks = st.number_input("نقرات الموقع / الواتساب - إن وجد", min_value=0, value=0)
-                watch_time_input = st.text_input("ساعات المشاهدة (Watch Time) - اختياري لحسابات الفيديو فقط")
+                watch_time_input = st.text_input("ساعات المشاهدة (Watch Time) - اختياري")
 
         submitted = st.form_submit_button("🚀 بدء تحليل الحسابات وتوليد الـ Audit")
 
@@ -199,7 +205,6 @@ if project_mode == "مشروع جديد":
         comp1_data = scrape_social_account(comp1_url, "competitor_1") if comp1_url else {"posts": []}
         comp2_data = scrape_social_account(comp2_url, "competitor_2") if comp2_url else {"posts": []}
 
-        # Structure Internal Metrics dynamically based ONLY on user inputs
         internal_metrics = {}
         if ad_spend > 0 or ad_objective != "لم يتم إجراء إعلانات":
             internal_metrics["ads_performance"] = {
@@ -215,20 +220,19 @@ if project_mode == "مشروع جديد":
         if watch_time_input:
             internal_metrics["watch_time"] = watch_time_input
 
-        # Serialize Data to JSON
         brand_data_json = json.dumps(brand_data, ensure_ascii=False, default=str)
         comp1_data_json = json.dumps(comp1_data, ensure_ascii=False, default=str)
         comp2_data_json = json.dumps(comp2_data, ensure_ascii=False, default=str)
         internal_metrics_json = json.dumps(internal_metrics, ensure_ascii=False, default=str)
 
-        st.info("🧠 2/2 جاري إعداد التقرير المخصص بناءً على معطياتك الفعلية...")
+        st.info("🧠 2/2 جاري إعداد التقرير المخصص بناءً على تواريخك ومعطياتك الفعلية...")
 
         analysis_prompt = f"""أنت استشاري خبير في Social Media Audit وBrand Strategy.
 
-قم بإجراء تحليل حقيقي ودقيق بناءً على المعطيات والروابط المجمعة التالية:
+قم بإجراء تحليل حقيقي ودقيق بناءً على المعطيات التالية:
 
 اسم البراند الرئيسي: {brand_name} (الرابط: {brand_url})
-فترة التحليل المطلوبة: {timeframe_choice}
+فترة التحليل المحددة يدوياً من المستخدم: من {start_date} إلى {end_date}
 
 بيانات البراند:
 {brand_data_json}
@@ -243,34 +247,22 @@ if project_mode == "مشروع جديد":
 {internal_metrics_json}
 
 قواعد صارمة للتحليل:
-1. التزم بالمنصات والروابط المذكورة. إذا كان رابط المنافس فيسبوك وليس إنستجرام، حلل أداءه كصفحة فيسبوك ولا تطلب رابط إنستجرام.
-2. لا تفرض أن هدف الإعلانات هو Leads أو Purchases إلا إذا اختار المستخدم ذلك صراحةً. اعتمد هدف الحملة المختار ({ad_objective}).
-3. لا تطبع تواريخ أو فترات زمنية تلقائية لم يطلبها المستخدم، واعتمد الفترة المحددة: ({timeframe_choice}).
-4. إذا كانت الخانات الاختيارية (مثل ساعات المشاهدة Watch Time أو أرقام الوصول) غير مدخلة، اكتب "غير مدخلة ضمن البيانات الداخلية" ولا تخترع أرقاماً لها.
-5. لا تعرض أي رابط إلا إذا كان موجوداً بالفعل في المدخلات.
+1. فترة التحليل محددة صراحةً من المستخدم كالتالي: من {start_date} إلى {end_date}. التزم بهذه التواريخ تماماً في التقرير ولا تغيرها.
+2. اعتمد أهداف الحملات ونوع المنصات المدخلة كما هي بدون فرض منصة أو هدف معين.
+3. إذا كانت الخانات الاختيارية غير مدخلة، اكتب "غير مدخلة ضمن البيانات" ولا تخترع أرقاماً لها.
 
-أخرج التقرير باللغة العربية وبأسلوب منظم وشامل يغطي الأقسام التالية:
-أولًا: نطاق التحليل والمنصات المفتوحة
-ثانيًا: الوضع الحالي للحسابات وتنوع المحتوى (Situation Analysis)
-ثالثًا: تحليل المنافسين (المنافس الأول والمنافس الثاني إن وجد)
-رابعًا: تحليل الإعلانات والأداء الداخلي (بناءً على هدف الحملة المختار)
-خامسًا: تحليل الجمهور وسلوك الشراء (Audience Analysis)
-سادسًا: مصفوفة SWOT (نقاط القوة، الضعف، الفرص، التهديدات)
-سابعًا: رحلة العميل (Customer Journey)
-ثامناً: الأهداف الاستراتيجية ومؤشرات الأداء (SMART Objectives & KPIs)
-تاسعًا: خطة العمل للـ 30 و60 و90 يومًا القادمة
-عاشرًا: شرائح الجمهور المستهدف (Buyer Personas)
+أخرج التقرير باللغة العربية وبأسلوب منظم وشامل يغطي كافة الأقسام الرئيسية للـ Audit والاستراتيجية.
 """
 
         try:
             ai_response = model.generate_content(analysis_prompt)
-            st.success("✅ تم استخراج التقرير بنجاح وفق معطياتك بالضبط!")
+            st.success("✅ تم استخراج التقرير بنجاح وفق التواريخ التي حددتها!")
             st.markdown(ai_response.text)
 
             try:
                 db_payload = {
                     "brand_name": brand_name,
-                    "inputs": {"brand_url": brand_url, "comp1": comp1_url, "comp2": comp2_url, "timeframe": timeframe_choice},
+                    "inputs": {"brand_url": brand_url, "comp1": comp1_url, "comp2": comp2_url, "start_date": str(start_date), "end_date": str(end_date)},
                     "scraped_data": brand_data,
                     "strategy_output": str(ai_response.text)
                 }
