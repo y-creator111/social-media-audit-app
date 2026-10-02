@@ -121,7 +121,8 @@ def init_services():
     
     supabase = create_client(supabase_url, supabase_key)
     genai.configure(api_key=gemini_key)
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    # تعديل اسم النموذج إلى gemini-3.8-flash المعتمد في الحساب
+    model = genai.GenerativeModel('gemini-3.8-flash')
     apify = ApifyClient(apify_key)
     return supabase, model, apify
 
@@ -190,7 +191,7 @@ def collect_meta_ad_library(brand_name, comp1_name, comp2_name):
                 "entity_type": entity_type,
                 "advertiser_name": name,
                 "ad_library_search_url": ad_url,
-                "ads_found": []  # Empty array unless direct Graph API or Scraper is attached
+                "ads_found": []
             })
             
     return {
